@@ -20,7 +20,7 @@ if (fs.existsSync(filterFile))
 
 const connect = async (instance = "SOURCE") => {
   try {
-    const client = new Client({
+    const opts = {
       node: workerData.ELASTICSEARCH[instance].URL,
       auth: {
         username: workerData.ELASTICSEARCH[instance].USERNAME,
@@ -29,7 +29,9 @@ const connect = async (instance = "SOURCE") => {
       tls: {
         rejectUnauthorized: false,
       },
-    });
+    };
+    logger.debug(JSON.stringify(opts, null, 4));
+    const client = new Client(opts);
 
     return client;
   } catch (e) {
