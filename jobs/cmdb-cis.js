@@ -33,6 +33,9 @@ const connect = async (instance = "SOURCE") => {
 
     return client;
   } catch (e) {
+    logger.error(
+      "Cannot connect to: " + workerData.ELASTICSEARCH[instance].URL
+    );
     logger.error(e.message);
     throw e;
   }

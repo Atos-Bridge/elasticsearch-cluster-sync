@@ -1,7 +1,15 @@
 [
   {
     "terms": {
-      "company.sys_id": ["99ad38121b00a8503e28eacee54bcb3f"]
+      "company.sys_id": [
+        "gstt-99ad38121b00a8503e28eacee54bcb3f",
+
+        "phht-302aff780fda2a009850ecd692050e62",
+
+        "akzo-ff60c5b81b6b63c01087eb186e4bcb5a",
+        "tmnl-d1e439570fbb5ec09850ecd692050ef0",
+        "nouryon-44a16656dbdcbb00a0c18a3a48961957"
+      ]
     }
   }
 ]
