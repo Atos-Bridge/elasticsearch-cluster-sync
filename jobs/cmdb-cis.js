@@ -19,18 +19,17 @@ if (fs.existsSync(filterFile))
   filters = JSON.parse(fs.readFileSync(filterFile, "utf-8"));
 
 const connect = async (instance = "SOURCE") => {
+  const opts = {
+    node: workerData.ELASTICSEARCH[instance].URL,
+    auth: {
+      username: workerData.ELASTICSEARCH[instance].USERNAME,
+      password: workerData.ELASTICSEARCH[instance].PASSWORD,
+    },
+    tls: {
+      rejectUnauthorized: false,
+    },
+  };
   try {
-    const opts = {
-      node: workerData.ELASTICSEARCH[instance].URL,
-      auth: {
-        username: workerData.ELASTICSEARCH[instance].USERNAME,
-        password: workerData.ELASTICSEARCH[instance].PASSWORD,
-      },
-      tls: {
-        rejectUnauthorized: false,
-      },
-    };
-    logger.debug(JSON.stringify(opts, null, 4));
     const client = new Client(opts);
 
     return client;
@@ -38,6 +37,7 @@ const connect = async (instance = "SOURCE") => {
     logger.error(
       "Cannot connect to: " + workerData.ELASTICSEARCH[instance].URL
     );
+    logger.debug(JSON.stringify(opts, null, 4));
     logger.error(e.message);
     throw e;
   }
