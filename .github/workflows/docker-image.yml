@@ -1,0 +1,54 @@
+name: Build n Push image
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'server/**'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  
+jobs:
+  build-and-push-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Set Env
+        run: |
+           echo "Reading package.json from ./package.json"
+           RELEASE_VERSION=$(cat ./package.json | jq -r '.version')
+           echo "RELEASE_VERSION=${RELEASE_VERSION}" >> $GITHUB_ENV
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v3
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: type=semver,pattern={{version}},value=${{ env.RELEASE_VERSION }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v3
+        with:
+          context: ./server
+          push: true
+          tags:  ${{ steps.meta.outputs.tags }}
+          labels:  ${{ steps.meta.outputs.labels }}
+        
+      
