@@ -4,7 +4,10 @@
   "description": "",
   "main": "app.js",
   "scripts": {
-    "start": "node ./app.js -l \"${LOGLEVEL:-info}\""
+    "start": "node ./app.js -l \"${LOGLEVEL:-info}\"",
+    "push": "npm version patch && git push",
+    "push-minor": "npm version minor && git push",
+    "push-major": "npm version major && git push"
   },
   "keywords": [],
   "author": "",
