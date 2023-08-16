@@ -1,0 +1,7 @@
+version: "3.9"
+services:
+  elasticseaarch-cluster-sync:
+    image: elasticseaarch-cluster-sync
+    network_mode: host
+    env_file:
+      - .envxx
