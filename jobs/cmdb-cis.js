@@ -200,8 +200,7 @@ const sync = async () => {
       index: workerData.ELASTICSEARCH["SOURCE"].INDEX,
       size,
       rest_total_hits_as_int: true,
-      sort: "@timestamp:asc",
-
+      sort: `${workerData.TIMEFIELD}:asc`,
       ...body,
     });
 
