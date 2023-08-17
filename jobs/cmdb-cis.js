@@ -167,7 +167,7 @@ const sync = async () => {
     const lastCheckPoint = await getLastTimestamp(
       target,
       workerData.ELASTICSEARCH["TARGET"].INDEX,
-      workerData.TIMEFIELD
+      workerData.ELASTICSEARCH["TARGET"].TIMEFIELD
     );
 
     let query = {
@@ -180,7 +180,7 @@ const sync = async () => {
       logger.info(`Last Checkpoint: ${lastCheckPoint.value_as_string}`);
       query.bool.filter.push({
         range: {
-          [workerData.TIMEFIELD]: {
+          [workerData.ELASTICSEARCH["SOURCE"].TIMEFIELD]: {
             gte: lastCheckPoint.value + 1,
           },
         },
@@ -200,7 +200,7 @@ const sync = async () => {
       index: workerData.ELASTICSEARCH["SOURCE"].INDEX,
       size,
       rest_total_hits_as_int: true,
-      sort: `${workerData.TIMEFIELD}:asc`,
+      sort: `${workerData.ELASTICSEARCH["SOURCE"].TIMEFIELD}:asc`,
       ...body,
     });
 
