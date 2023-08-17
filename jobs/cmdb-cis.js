@@ -1,11 +1,19 @@
 import { parentPort, workerData } from "node:worker_threads";
 import process from "node:process";
 import Logger from "../lib/Logger.js";
-import { Client } from "@elastic/elasticsearch";
+import * as es8 from "es8";
+import * as es7 from "es7";
 import _ from "lodash";
 import * as fs from "node:fs";
 
+const clients = {
+  es7,
+  es8,
+};
+
 import Transform from "../transform/cmdb-cis.js";
+
+const JSON_stringify = (obj) => logger.debug(JSON.stringify(obj, null, 4));
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -19,18 +27,22 @@ if (fs.existsSync(filterFile))
   filters = JSON.parse(fs.readFileSync(filterFile, "utf-8"));
 
 const connect = async (instance = "SOURCE") => {
+  const esClientVersion =
+    workerData.ELASTICSEARCH[instance].ES_CLIENT_VERSION || "es8";
+  logger.info(`Try to use ${esClientVersion} for ${instance}`);
+  const esClient = _.get(clients, esClientVersion, es8);
   const opts = {
     node: workerData.ELASTICSEARCH[instance].URL,
     auth: {
       username: workerData.ELASTICSEARCH[instance].USERNAME,
       password: workerData.ELASTICSEARCH[instance].PASSWORD,
     },
-    tls: {
+    [`${esClientVersion == "es8" ? "tls" : "ssl"}`]: {
       rejectUnauthorized: false,
     },
   };
   try {
-    const client = new Client(opts);
+    const client = new esClient.Client(opts);
 
     return client;
   } catch (e) {
@@ -43,10 +55,35 @@ const connect = async (instance = "SOURCE") => {
   }
 };
 
+const getTargetClientVersion = () =>
+  workerData.ELASTICSEARCH.TARGET.ES_CLIENT_VERSION;
+
+const getSourceClientVersion = () =>
+  workerData.ELASTICSEARCH.SOURCE.ES_CLIENT_VERSION;
+
+const resultPath = ({ instance } = {}) => {
+  const esVersion = workerData.ELASTICSEARCH[instance].ES_CLIENT_VERSION;
+  switch (esVersion) {
+    case "es7":
+      return "body.";
+    case "es8":
+      return "";
+  }
+};
+const buildBody = ({ payload, instance } = {}) => {
+  const esVersion = workerData.ELASTICSEARCH[instance].ES_CLIENT_VERSION;
+  switch (esVersion) {
+    case "es7":
+      return { body: payload };
+    case "es8":
+      return payload;
+  }
+};
 const store = async (client, docs) => {
   logger.info(
     `Go to store ${docs.length} document(s)... to ${workerData.ELASTICSEARCH["TARGET"].INDEX}`
   );
+
   const datasource = transform(
     docs.map(({ _id, _source }) => ({
       ..._source,
@@ -90,11 +127,10 @@ const store = async (client, docs) => {
 };
 
 const getLastTimestamp = async (client, index, timeField) => {
-  const result = await client.search(
-    {
-      index,
-      size: 0,
-      aggregations: {
+  const body = buildBody({
+    instance: "TARGET",
+    payload: {
+      aggs: {
         lastTimeStamp: {
           max: {
             field: timeField,
@@ -102,12 +138,23 @@ const getLastTimestamp = async (client, index, timeField) => {
         },
       },
     },
+  });
+  JSON_stringify(body);
+  const result = await client.search(
+    {
+      index,
+      size: 0,
+      ...body,
+    },
     {
       ignore: [404],
     }
   );
 
-  return _.get(result, "aggregations.lastTimeStamp");
+  return _.get(
+    result,
+    `${resultPath({ instance: "TARGET" })}aggregations.lastTimeStamp`
+  );
 };
 
 const sync = async () => {
@@ -144,18 +191,18 @@ const sync = async () => {
 
     logger.info(`Query: ${JSON.stringify(query, null, 4)}`);
 
+    const body = buildBody({
+      instance: "TARGET",
+      payload: { query },
+    });
+
     const scroll = source.helpers.scrollSearch({
       index: workerData.ELASTICSEARCH["SOURCE"].INDEX,
       size,
       rest_total_hits_as_int: true,
-      sort: [
-        {
-          "@timestamp": {
-            order: "asc",
-          },
-        },
-      ],
-      query,
+      sort: "@timestamp:asc",
+
+      ...body,
     });
 
     let toStore = [];
@@ -190,7 +237,7 @@ const sync = async () => {
     }
     logger.info(`${fetched} docs fetched`);
   } catch (e) {
-    logger.info(e.message);
+    logger.error(e);
     throw e;
   }
 };
