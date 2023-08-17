@@ -172,7 +172,7 @@ export default function ({ source = "bgi:" } = {}) {
         source_attr: "operational_status",
         destinations: [
           {
-            attr: "name",
+            attr: "operational_status",
           },
         ],
       },
