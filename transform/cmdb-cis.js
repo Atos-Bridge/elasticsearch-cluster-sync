@@ -1,5 +1,9 @@
 import * as _ from "lodash-es";
 
+import Package from `${process.cwd()}/package.json`
+
+
+
 const customerMap = {
   "99ad38121b00a8503e28eacee54bcb3f": {
     shorthand: "wsp",
@@ -7,7 +11,7 @@ const customerMap = {
   },
 };
 
-const version = 1;
+
 const tags = ["bgi-cmdb-cis-sync"];
 
 export default function ({ source = "bgi:" } = {}) {
@@ -25,7 +29,7 @@ export default function ({ source = "bgi:" } = {}) {
       },
       {
         computed: (doc) => {
-          return version;
+          return Package.version;
         },
         destinations: [
           {
@@ -57,7 +61,7 @@ export default function ({ source = "bgi:" } = {}) {
           {
             attr: "geo",
             converter: (value) => {
-              return {
+              const geo = {
                 city_name: _.get(value, "city.name"),
                 country_iso_code: _.get(value, "country.iso_code"),
                 state_name: _.get(value, "state.name"),
@@ -65,6 +69,8 @@ export default function ({ source = "bgi:" } = {}) {
                 name: _.get(value, "name"),
                 location: _.get(value, "location"),
               };
+
+              return _.keys(geo).length > 0 ? geo : null;
             },
           },
         ],
@@ -153,7 +159,7 @@ export default function ({ source = "bgi:" } = {}) {
         source_attr: "created_at",
         destinations: [
           {
-            attr: "created_at",
+            attr: "sys_created_on",
           },
         ],
       },
