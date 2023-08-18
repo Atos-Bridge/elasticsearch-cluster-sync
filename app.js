@@ -1,6 +1,7 @@
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 require("dotenv").config();
+import * as fs from "node:fs";
 import _ from "lodash-es";
 import Logger from "./lib/Logger.js";
 import Bree from "bree";
@@ -9,6 +10,12 @@ const express = require("express");
 import Config from "./lib/Config.js";
 const flatten = require("flat");
 const pino = require("pino");
+const getPackage = () => {
+  const file = `${process.cwd()}/package.json`;
+  return JSON.parse(fs.readFileSync(file));
+};
+
+const Package = getPackage();
 
 const program = new Command();
 program
@@ -39,7 +46,7 @@ const bree = new Bree({
         jobConfig.JOB[job].SCHEDULE.INTERVAL ||
         jobConfig.JOB[job].SCHEDULE.CRON,
       worker: {
-        workerData: jobConfig.JOB[job].WORKER,
+        workerData: { ...jobConfig.JOB[job].WORKER, Package },
       },
     };
   }),
@@ -86,7 +93,8 @@ app.get("/jobs", async (req, res, next) => {
 
       return {
         ...job,
-        workerData: flattenData,
+
+        workerData: { ...flattenData },
       };
     }),
   });

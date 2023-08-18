@@ -242,7 +242,8 @@ const sync = async () => {
 };
 
 const transform = (data) => {
-  const rules = Transform();
+  console.log(workerData);
+  const rules = Transform({ Package: workerData.Package });
   const transformed = [];
   for (const doc of data) {
     const transformedDoc = {
@@ -255,10 +256,12 @@ const transform = (data) => {
       destinations.map((dest) => {
         const { attr, converter } = dest;
         let destValue = value;
-        if (typeof converter == "function") destValue = converter(destValue);
+        if (typeof converter == "function")
+          destValue = converter(destValue, doc);
         _.set(transformedDoc, attr, destValue);
       });
     }
+
     transformed.push(transformedDoc);
   }
   logger.debug(JSON.stringify(transformed[0]));

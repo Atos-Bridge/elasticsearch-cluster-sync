@@ -1,20 +1,16 @@
 import * as _ from "lodash-es";
-
-import Package from `${process.cwd()}/package.json`
-
-
-
-const customerMap = {
-  "99ad38121b00a8503e28eacee54bcb3f": {
-    shorthand: "wsp",
-    name: "WSP Global Inc",
-  },
-};
-
+import * as fs from "node:fs";
 
 const tags = ["bgi-cmdb-cis-sync"];
 
-export default function ({ source = "bgi:" } = {}) {
+/* const getPackage = () => {
+  const file = `${process.cwd()}/package.json`;
+  return JSON.parse(fs.readFileSync(file));
+};
+
+const Package = getPackage(); */
+
+export default function ({ source = "bgi:", Package = {} } = {}) {
   return {
     fields: [
       {
@@ -60,7 +56,7 @@ export default function ({ source = "bgi:" } = {}) {
         destinations: [
           {
             attr: "geo",
-            converter: (value) => {
+            converter: (value, doc) => {
               const geo = {
                 city_name: _.get(value, "city.name"),
                 country_iso_code: _.get(value, "country.iso_code"),
@@ -70,7 +66,9 @@ export default function ({ source = "bgi:" } = {}) {
                 location: _.get(value, "location"),
               };
 
-              return _.keys(geo).length > 0 ? geo : null;
+              return _.keys(geo).every((k) => geo[k] == undefined) == true
+                ? undefined
+                : geo;
             },
           },
         ],
