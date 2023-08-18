@@ -242,7 +242,6 @@ const sync = async () => {
 };
 
 const transform = (data) => {
-  console.log(workerData);
   const rules = Transform({ Package: workerData.Package });
   const transformed = [];
   for (const doc of data) {
