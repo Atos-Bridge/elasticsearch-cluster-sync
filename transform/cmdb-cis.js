@@ -146,6 +146,14 @@ export default function ({ source = "bgi:", Package = {} } = {}) {
         ],
       },
       {
+        source_attr: "company",
+        destinations: [
+          {
+            attr: "company",
+          },
+        ],
+      },
+      {
         source_attr: "updated_at",
         destinations: [
           {
