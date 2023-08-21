@@ -1,3 +1,5 @@
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
 import { parentPort, workerData } from "node:worker_threads";
 import process from "node:process";
 import Logger from "../lib/Logger.js";
@@ -5,6 +7,7 @@ import * as es8 from "es8";
 import * as es7 from "es7";
 import _ from "lodash";
 import * as fs from "node:fs";
+const fprint = require("fprint");
 
 const clients = {
   es7,
@@ -12,6 +15,8 @@ const clients = {
 };
 
 import Transform from "../transform/cmdb-cis.js";
+
+let INIT = true;
 
 const JSON_stringify = (obj) => logger.debug(JSON.stringify(obj, null, 4));
 
@@ -23,8 +28,26 @@ const logger = Logger({ appName: "cmdb-cis-sync" });
 const filterFile = process.cwd() + "/filters/cmdb-cis.json";
 let filters = [];
 
-if (fs.existsSync(filterFile))
+if (fs.existsSync(filterFile)) {
   filters = JSON.parse(fs.readFileSync(filterFile, "utf-8"));
+}
+
+const shasumCheck = async () => {
+  let shasum = "";
+  let currentShasum = "";
+  if (fs.existsSync(filterFile)) {
+    if (fs.existsSync(`${filterFile}.sha256`)) {
+      currentShasum = fs.readFileSync(`${filterFile}.sha256`, "utf-8");
+    }
+
+    shasum = await fprint.createFingerprint(filterFile, "sha256");
+    if (shasum == currentShasum) {
+      INIT = false;
+    } else {
+      fs.writeFileSync(`${filterFile}.sha256`, shasum);
+    }
+  }
+};
 
 const connect = async (instance = "SOURCE") => {
   const esClientVersion =
@@ -158,11 +181,14 @@ const getLastTimestamp = async (client, index, timeField) => {
 };
 
 const sync = async () => {
+  await shasumCheck();
+  logger.info(`${INIT ? "init sync ... create checkpoint" : "use checkpoint"}`);
   const source = await connect("SOURCE");
   const target = await connect("TARGET");
 
   const bulkSize = workerData.BULKSIZE;
   const size = workerData.HITSSIZE;
+  const reInit = workerData.REINIT || false;
   try {
     const lastCheckPoint = await getLastTimestamp(
       target,
@@ -176,7 +202,7 @@ const sync = async () => {
       },
     };
 
-    if (lastCheckPoint.value) {
+    if (lastCheckPoint.value && !INIT) {
       logger.info(`Last Checkpoint: ${lastCheckPoint.value_as_string}`);
       query.bool.filter.push({
         range: {
