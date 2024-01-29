@@ -1,0 +1,67 @@
+{
+  "bool": {
+    "must": [
+      {
+        "range": {
+          "state": {
+            "lt": 6
+          }
+        }
+      },
+      {
+        "range": {
+          "priority": {
+            "lt": 3,
+            "gt": 0
+          }
+        }
+      },
+      {
+        "bool": {
+          "should": [
+            {
+              "terms": {
+                "company.parent.sys_id": [
+                  "d63feb00db896740e8e44dc2ba96193b",
+                  "25e3a2c0db324300e932ff461d9619cc",
+                  "4b99a76fdba313c8e932ff461d961986"
+                ]
+              }
+            },
+            {
+              "terms": {
+                "company.sys_id": [
+                  "40bf4f0bdb4010d0814cef905b96194b",
+                  "69fd8b47db4010d0814cef905b961929",
+                  "a07589d51b6f0c101087eb186e4bcb67",
+                  "c7bbed02dbdaa3c47b22459d3b961944",
+                  "0230e31ddbc69c18a0c18a3a489619bc",
+                  "3012979b0f26aa809850ecd692050e83",
+                  "c1fe0921db1a6bc4e8e44dc2ba9619c8",
+                  "273d2ef5db981b48e932ff461d96191f"
+                ]
+              }
+            },
+            {
+              "terms": {
+                "top_level_parents.id": [
+                  "SNC.G.P01.014561055",
+                  "SNC.G.P01.013954608",
+                  "SNC.G.P01.014548219"
+                ]
+              }
+            },
+            {
+              "term": {
+                "datasource": {
+                  "value": "iram.siemens.cloud"
+                }
+              }
+            }
+          ],
+          "minimum_should_match": 1
+        }
+      }
+    ]
+  }
+}

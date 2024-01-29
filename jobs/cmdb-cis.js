@@ -2,81 +2,51 @@ import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 import { parentPort, workerData } from "node:worker_threads";
 import process from "node:process";
-import Logger from "../lib/Logger.js";
+import { measureTime, connect, sha256Check } from "../lib/Helpers.js";
 import * as es8 from "es8";
 import * as es7 from "es7";
 import _ from "lodash";
 import * as fs from "node:fs";
-const fprint = require("fprint");
 
-const clients = {
-  es7,
-  es8,
-};
+const elapsed = measureTime();
 
 import Transform from "../transform/cmdb-cis.js";
 
 let INIT = true;
+const logger = {
+  info: (message) =>
+    parentPort.postMessage({
+      message,
+      level: "info",
+    }),
+  debug: (message) =>
+    parentPort.postMessage({
+      message,
+      level: "debug",
+    }),
+  warning: (message) =>
+    parentPort.postMessage({
+      message,
+      level: "warning",
+    }),
+  error: (message) =>
+    parentPort.postMessage({
+      message,
+      level: "error",
+    }),
+};
+const JSON_stringify = (obj) =>
+  parentPort.postMessage({
+    message: JSON.stringify(obj, null, 4),
+    level: "debug",
+  });
 
-const JSON_stringify = (obj) => logger.debug(JSON.stringify(obj, null, 4));
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-const logger = Logger({ appName: "cmdb-cis-sync" });
 const filterFile = process.cwd() + "/filters/cmdb-cis.json";
 let filters = [];
 
 if (fs.existsSync(filterFile)) {
   filters = JSON.parse(fs.readFileSync(filterFile, "utf-8"));
 }
-
-const shasumCheck = async () => {
-  let shasum = "";
-  let currentShasum = "";
-  if (fs.existsSync(filterFile)) {
-    if (fs.existsSync(`${filterFile}.sha256`)) {
-      currentShasum = fs.readFileSync(`${filterFile}.sha256`, "utf-8");
-    }
-
-    shasum = await fprint.createFingerprint(filterFile, "sha256");
-    if (shasum == currentShasum) {
-      INIT = false;
-    } else {
-      fs.writeFileSync(`${filterFile}.sha256`, shasum);
-    }
-  }
-};
-
-const connect = async (instance = "SOURCE") => {
-  const esClientVersion =
-    workerData.ELASTICSEARCH[instance].ES_CLIENT_VERSION || "es8";
-  logger.info(`Try to use ${esClientVersion} for ${instance}`);
-  const esClient = _.get(clients, esClientVersion, es8);
-  const opts = {
-    node: workerData.ELASTICSEARCH[instance].URL,
-    auth: {
-      username: workerData.ELASTICSEARCH[instance].USERNAME,
-      password: workerData.ELASTICSEARCH[instance].PASSWORD,
-    },
-    [`${esClientVersion == "es8" ? "tls" : "ssl"}`]: {
-      rejectUnauthorized: false,
-    },
-  };
-  try {
-    const client = new esClient.Client(opts);
-
-    return client;
-  } catch (e) {
-    logger.error(
-      "Cannot connect to: " + workerData.ELASTICSEARCH[instance].URL
-    );
-    logger.debug(JSON.stringify(opts, null, 4));
-    logger.error(e.message);
-    throw e;
-  }
-};
 
 const getTargetClientVersion = () =>
   workerData.ELASTICSEARCH.TARGET.ES_CLIENT_VERSION;
@@ -103,19 +73,21 @@ const buildBody = ({ payload, instance } = {}) => {
   }
 };
 const store = async (client, docs) => {
-  logger.info(
-    `Go to store ${docs.length} document(s)... to ${workerData.ELASTICSEARCH["TARGET"].INDEX}`
-  );
+  parentPort.postMessage({
+    message: `Go to store ${docs.length} document(s)... to ${workerData.ELASTICSEARCH["TARGET"].INDEX}`,
+  });
 
   const datasource = transform(
     docs.map(({ _id, _source }) => ({
       ..._source,
       _id,
-    }))
+    })),
   );
 
   const errors = [];
-  logger.info("Storing ....");
+  parentPort.postMessage({
+    message: "Storing ....",
+  });
   const result = await client.helpers.bulk({
     datasource,
     onDrop(doc) {
@@ -135,13 +107,15 @@ const store = async (client, docs) => {
       ];
     },
   });
-  logger.info("Storing .... done");
 
-  logger.info(
-    `Total: ${result.total}, successful: ${result.successful}, failed: ${result.failed}, aborted: ${result.aborted} `
-  );
+  parentPort.postMessage({
+    message: `Done, Total: ${result.total}, successful: ${result.successful}, failed: ${result.failed}, aborted: ${result.aborted} `,
+  });
   if (errors.length > 0) {
-    logger.info(errors);
+    parentPort.postMessage({
+      message: JSON.stringify(errors),
+      level: "error",
+    });
   }
   return {
     result,
@@ -162,38 +136,45 @@ const getLastTimestamp = async (client, index, timeField) => {
       },
     },
   });
-  JSON_stringify(body);
-  const result = await client.search(
-    {
-      index,
-      size: 0,
-      ...body,
-    },
-    {
-      ignore: [404],
-    }
-  );
 
-  return _.get(
-    result,
-    `${resultPath({ instance: "TARGET" })}aggregations.lastTimeStamp`
-  );
+  JSON_stringify(body);
+  try {
+    const result = await client.search(
+      {
+        index,
+        size: 0,
+        ...body,
+      },
+      {
+        ignore: [404],
+      },
+    );
+    console.log(result);
+    return _.get(
+      result,
+      `${resultPath({ instance: "TARGET" })}aggregations.lastTimeStamp`,
+    );
+  } catch (error) {
+    throw error;
+  }
 };
 
 const sync = async () => {
-  await shasumCheck();
-  logger.info(`${INIT ? "init sync ... create checkpoint" : "use checkpoint"}`);
-  const source = await connect("SOURCE");
-  const target = await connect("TARGET");
+  INIT = await sha256Check(filterFile);
+  parentPort.postMessage({
+    message: `${INIT ? "init sync ... create checkpoint" : "use checkpoint"}`,
+  });
+  const source = await connect("SOURCE", workerData, logger);
+  const target = await connect("TARGET", workerData, logger);
 
-  const bulkSize = workerData.BULKSIZE;
-  const size = workerData.HITSSIZE;
+  const bulkSize = workerData.BULK_SIZE;
+  const size = workerData.HITS_SIZE;
   const reInit = workerData.REINIT || false;
   try {
     const lastCheckPoint = await getLastTimestamp(
       target,
       workerData.ELASTICSEARCH["TARGET"].INDEX,
-      workerData.ELASTICSEARCH["TARGET"].TIMEFIELD
+      workerData.ELASTICSEARCH["TARGET"].TIME_FIELD,
     );
 
     let query = {
@@ -203,10 +184,12 @@ const sync = async () => {
     };
 
     if (lastCheckPoint.value && !INIT) {
-      logger.info(`Last Checkpoint: ${lastCheckPoint.value_as_string}`);
+      parentPort.postMessage({
+        message: `Last Checkpoint: ${lastCheckPoint.value_as_string}`,
+      });
       query.bool.filter.push({
         range: {
-          [workerData.ELASTICSEARCH["SOURCE"].TIMEFIELD]: {
+          [workerData.ELASTICSEARCH["SOURCE"].TIME_FIELD]: {
             gte: lastCheckPoint.value + 1,
           },
         },
@@ -215,7 +198,10 @@ const sync = async () => {
 
     query.bool.filter = query.bool.filter.concat(filters);
 
-    logger.info(`Query: ${JSON.stringify(query, null, 4)}`);
+    parentPort.postMessage({
+      message: `Query: ${JSON.stringify(query, null, 4)}`,
+      level: "info",
+    });
 
     const body = buildBody({
       instance: "TARGET",
@@ -226,28 +212,30 @@ const sync = async () => {
       index: workerData.ELASTICSEARCH["SOURCE"].INDEX,
       size,
       rest_total_hits_as_int: true,
-      sort: `${workerData.ELASTICSEARCH["SOURCE"].TIMEFIELD}:asc`,
+      sort: `${workerData.ELASTICSEARCH["SOURCE"].TIME_FIELD}:asc`,
       ...body,
     });
 
     let toStore = [];
-    logger.info("Start fetching data ....");
-    logger.info("Result size:" + size);
-    logger.info("Result bulkSize:" + bulkSize);
+    parentPort.postMessage({
+      message: `Start fetching data! Result used size: ${size}, used bulk size: ${bulkSize}`,
+      level: "info",
+    });
     let scrollResult;
     let fetched = 0;
 
     for await (scrollResult of scroll) {
       const {
         body: { hits },
-        statuCode,
+        statusCode,
       } = scrollResult;
       fetched += scrollResult.documents.length;
 
       toStore = toStore.concat(hits.hits);
-      logger.info(
-        `${fetched} documents fetched: ${fetched}/${hits.total}, cache: ${toStore.length}`
-      );
+      parentPort.postMessage({
+        message: `${fetched} documents fetched: ${fetched}/${hits.total}, cache: ${toStore.length}, ${statusCode}`,
+        level: "info",
+      });
 
       if (toStore.length >= bulkSize) {
         await store(target, toStore);
@@ -255,29 +243,38 @@ const sync = async () => {
       }
 
       if (fetched >= hits.total && toStore.length > 0) {
-        logger.info("Store last bucket...." + toStore.length);
+        parentPort.postMessage({
+          message: "Store last bucket...." + toStore.length,
+        });
         await store(target, toStore);
         toStore = [];
       }
     }
-    logger.info(`${fetched} docs fetched`);
+    return fetched;
   } catch (e) {
-    logger.error(e);
+    parentPort.postMessage({
+      message: e.message,
+      level: "error",
+    });
     throw e;
   }
 };
 
 const transform = (data) => {
   const rules = Transform({ Package: workerData.Package });
+
   const transformed = [];
+
   for (const doc of data) {
     const transformedDoc = {
       _id: doc._id,
     };
+
     for (const field of rules.fields) {
       const { source_attr, computed = null, destinations = [] } = field;
 
       const value = computed ? computed(doc) : _.get(doc, source_attr);
+
       destinations.map((dest) => {
         const { attr, converter } = dest;
         let destValue = value;
@@ -289,14 +286,21 @@ const transform = (data) => {
 
     transformed.push(transformedDoc);
   }
-  logger.debug(JSON.stringify(transformed[0]));
+  parentPort.postMessage({
+    message: JSON.stringify(transformed[0]),
+    level: "debug",
+  });
   return transformed;
 };
 
+elapsed.start();
 await sync();
+const elapsedTime = elapsed.end("s");
 
+parentPort.postMessage({
+  message: `Finished, elapsed time: ${elapsedTime.elapsed}${elapsedTime.unit}`,
+  level: "info",
+});
 // wait for a promise to finish
 
-// signal to parent that the job is done
-if (parentPort) parentPort.postMessage("done");
-else process.exit(0);
+process.exit(0);

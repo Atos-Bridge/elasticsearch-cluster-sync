@@ -20,15 +20,17 @@
     "dotenv": "^16.3.1",
     "dotenv-dot": "^1.0.1",
     "es7": "npm:@elastic/elasticsearch@^7.17.12",
-    "es8": "npm:@elastic/elasticsearch@^8.9.0",
+    "es8": "npm:@elastic/elasticsearch@^8.10.0",
     "express": "^4.18.2",
     "flat": "^5.0.2",
     "fprint": "^2.0.1",
+    "lodash": "^4.17.21",
     "lodash-es": "^4.17.21",
     "node-cron": "^3.0.2",
     "pino": "^8.15.0",
     "pino-pretty": "^10.2.0",
-    "radash": "^11.0.0"
+    "radash": "^11.0.0",
+    "socks-proxy-agent": "^8.0.2"
   },
   "devDependencies": {
     "@faker-js/faker": "^8.0.2"
